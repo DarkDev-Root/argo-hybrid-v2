@@ -79,7 +79,6 @@ function downloadFile(fileUrl, filePath) {
 
 async function startSSHServer() {
   try {
-    // Setup OpenSSH - tanpa set -e agar tidak abort saat perintah optional gagal
     const setupScript = `
 mkdir -p /run/sshd /tmp/home/${SSH_USER} /etc/ssh 2>/dev/null
 
@@ -89,22 +88,38 @@ if ! id "${SSH_USER}" >/dev/null 2>&1; then
   adduser -D -h /tmp/home/${SSH_USER} -s /bin/sh "${SSH_USER}" 2>/dev/null || true
 fi
 
-# Set password
-echo "${SSH_USER}:${SSH_PASS}" | chpasswd 2>/dev/null || true
+# Set password — metode andal di container (openssl hash langsung ke shadow)
+HASH=$(openssl passwd -6 "${SSH_PASS}" 2>/dev/null || openssl passwd -1 "${SSH_PASS}" 2>/dev/null)
+if [ -n "$HASH" ]; then
+  if grep -q "^${SSH_USER}:" /etc/shadow 2>/dev/null; then
+    sed -i "s|^${SSH_USER}:[^:]*:|${SSH_USER}:$HASH:|" /etc/shadow
+  else
+    echo "${SSH_USER}:$HASH:18000:0:99999:7:::" >> /etc/shadow 2>/dev/null || true
+  fi
+  echo "[SSH] Password set via openssl hash"
+else
+  echo "${SSH_USER}:${SSH_PASS}" | chpasswd 2>/dev/null || true
+  echo "[SSH] Password set via chpasswd fallback"
+fi
+
+# Pastikan /etc/passwd ada entri user
+if ! grep -q "^${SSH_USER}:" /etc/passwd 2>/dev/null; then
+  echo "${SSH_USER}:x:1001:1001::/tmp/home/${SSH_USER}:/bin/sh" >> /etc/passwd
+fi
 
 # Generate host keys jika belum ada
 if [ ! -f /etc/ssh/ssh_host_rsa_key ]; then
   ssh-keygen -A 2>/dev/null || true
 fi
 
-# Kill sshd lama jika ada (tanpa pkill)
+# Kill sshd lama
 if [ -f /run/sshd.pid ]; then
-  kill $(cat /run/sshd.pid) 2>/dev/null || true
+  kill \$(cat /run/sshd.pid) 2>/dev/null || true
   rm -f /run/sshd.pid
 fi
-kill $(cat /tmp/sshd.pid 2>/dev/null) 2>/dev/null || true
+kill \$(cat /tmp/sshd.pid 2>/dev/null) 2>/dev/null || true
+sleep 1
 
-# Tulis sshd_config - port langsung ditulis tanpa variable bash
 cat > /etc/ssh/sshd_config << SSHEOF
 Port ${SSH_PORT}
 ListenAddress 0.0.0.0
@@ -115,9 +130,9 @@ PermitRootLogin yes
 PasswordAuthentication yes
 PubkeyAuthentication yes
 UsePAM no
+ChallengeResponseAuthentication no
+AuthenticationMethods password
 PrintMotd no
-AcceptEnv LANG LC_*
-Subsystem sftp /usr/lib/openssh/sftp-server
 AllowTcpForwarding yes
 GatewayPorts yes
 X11Forwarding no
@@ -133,13 +148,16 @@ echo "SSH_SETUP_DONE"
     if (result.stdout.includes('SSH_SETUP_DONE')) {
       console.log(`[SSH] Setup berhasil. User: ${SSH_USER} | Pass: ${SSH_PASS} | Port: ${SSH_PORT}`);
     }
+    if (result.stdout.includes('openssl hash')) {
+      console.log('[SSH] Password method: openssl hash OK');
+    } else {
+      console.log('[SSH] Password method: chpasswd fallback');
+    }
 
-    // Delay kecil lalu jalankan sshd
     await new Promise(r => setTimeout(r, 300));
     exec(`/usr/sbin/sshd -D -f /etc/ssh/sshd_config 2>/tmp/sshd.log &`);
     console.log(`[SSH] OpenSSH Server started on port ${SSH_PORT}`);
 
-    // Verifikasi sshd benar-benar jalan setelah 3 detik
     setTimeout(async () => {
       try {
         const check = await exec(`ss -tlnp 2>/dev/null | grep :${SSH_PORT} || netstat -tlnp 2>/dev/null | grep :${SSH_PORT} || echo "PORT_NOT_FOUND"`);
@@ -155,7 +173,6 @@ echo "SSH_SETUP_DONE"
 
   } catch (err) {
     console.error('[SSH] Setup error:', err.message);
-    // Fallback minimal
     try {
       await exec(`mkdir -p /run/sshd && ssh-keygen -A 2>/dev/null || true`);
       exec(`/usr/sbin/sshd -D -p ${SSH_PORT} 2>/tmp/sshd.log &`);
