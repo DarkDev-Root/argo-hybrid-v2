@@ -23,8 +23,8 @@ const CFIP = process.env.CFIP || 'bug.com';
 const CFPORT = process.env.CFPORT || 443;
 const NAME = process.env.NAME || 'BLUEHAT358';
 const SSH_PORT = process.env.SSH_PORT || 2222;
-const SSH_USER = process.env.SSH_USER || 'shiro';
-const SSH_PASS = process.env.SSH_PASS || 'BlueHat358_5h1r0';
+const SSH_USER = process.env.SSH_USER || 'user';
+const SSH_PASS = process.env.SSH_PASS || 'BlueHat358';
 const SSH_WS_PATH = '/ssh-BlueHat358';
 
 // ==================== GLOBAL CONSTANTS ====================
