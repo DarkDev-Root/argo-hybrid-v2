@@ -816,29 +816,58 @@ class HybridServer {
 
   // SSH over WebSocket: bridge WS <-> TCP ke sshd lokal
   handleSSHWebSocket(ws) {
+    let pendingBuffer = []; // buffer data sshd sebelum WS ready
+    let wsReady = false;
+
     const sshSocket = net.createConnection({ host: '127.0.0.1', port: parseInt(SSH_PORT) }, () => {
       console.log('[SSH-WS] Client connected, bridging to sshd');
+    });
+
+    // Flush pending buffer begitu WS open
+    const flushPending = () => {
+      wsReady = true;
+      if (pendingBuffer.length > 0) {
+        console.log(`[SSH-WS] Flushing ${pendingBuffer.length} buffered chunk(s) to WS`);
+        for (const chunk of pendingBuffer) {
+          try { ws.send(chunk); } catch(e) {}
+        }
+        pendingBuffer = [];
+      }
+    };
+
+    // WS open event — pastikan flush saat ready
+    if (ws.readyState === WS_READY_STATE_OPEN) {
+      flushPending();
+    } else {
+      ws.once('open', flushPending);
+      // Fallback: anggap ready setelah 100ms jika event tidak fired
+      setTimeout(() => { if (!wsReady) flushPending(); }, 100);
+    }
+
+    // SSH → WS: buffer jika belum ready
+    sshSocket.on('data', (chunk) => {
+      try {
+        this.stats.tx += chunk.length;
+        if (wsReady && ws.readyState === WS_READY_STATE_OPEN) {
+          ws.send(chunk);
+        } else {
+          pendingBuffer.push(chunk);
+        }
+      } catch(e) {}
     });
 
     // WS → SSH
     ws.on('message', (data) => {
       try {
-        if (sshSocket.writable) sshSocket.write(Buffer.isBuffer(data) ? data : Buffer.from(data));
-        this.stats.rx += data.length;
-      } catch(e) {}
-    });
-
-    // SSH → WS
-    sshSocket.on('data', (chunk) => {
-      try {
-        this.stats.tx += chunk.length;
-        if (ws.readyState === WS_READY_STATE_OPEN) ws.send(chunk);
+        const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+        this.stats.rx += buf.length;
+        if (sshSocket.writable) sshSocket.write(buf);
       } catch(e) {}
     });
 
     // Cleanup dua arah
-    ws.on('close', () => { try { sshSocket.destroy(); } catch(e) {} });
-    ws.on('error', () => { try { sshSocket.destroy(); } catch(e) {} });
+    ws.on('close', () => { pendingBuffer = []; try { sshSocket.destroy(); } catch(e) {} });
+    ws.on('error', () => { pendingBuffer = []; try { sshSocket.destroy(); } catch(e) {} });
     sshSocket.on('close', () => { try { ws.close(); } catch(e) {} });
     sshSocket.on('error', (err) => {
       console.error('[SSH-WS] sshd connection error:', err.message);
