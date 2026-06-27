@@ -114,7 +114,7 @@ HostKey /etc/ssh/ssh_host_ecdsa_key
 PermitRootLogin yes
 PasswordAuthentication yes
 PubkeyAuthentication yes
-UsePAM yes
+UsePAM no
 PrintMotd no
 AcceptEnv LANG LC_*
 Subsystem sftp /usr/lib/openssh/sftp-server
