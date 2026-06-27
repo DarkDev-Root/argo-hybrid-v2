@@ -1,5 +1,5 @@
 <div align="center">
-  <h1><span style="color: white;">MEDIA</span><span style="color: #0088FF;">FAIRY</span> GATEWAY CORE</h1>
+  <h1><span style="color: white;">BlueHat</span><span style="color: #0088FF;">358</span> GATEWAY CORE</h1>
   <p><strong>Advanced Hybrid Web Panel & VPN Tunneling (VLESS, VMESS, TROJAN, SSH)</strong></p>
   <p>Gateway Core berbasis Node.js dengan antarmuka macOS-inspired. Menggabungkan routing Xray-core, Cloudflared (Argo Tunnel), SSH Server, dan Web Dashboard dalam satu environment yang ringan.</p>
 </div>
@@ -28,7 +28,7 @@
 | `CFIP`      | Bug IP CDN / SNI untuk bypass provider                 | `saas.sin.fan`      |
 | `NAME`      | Nama alias untuk tag konfigurasi                       | `BLUEHAT358`        |
 | `SSH_USER`  | Username SSH (default root)                            | `root`              |
-| `SSH_PASS`  | Password SSH                                           | `BlueHat358_5h1r0`  |
+| `SSH_PASS`  | Password SSH                                           | `BlueHat358`  |
 
 > **Penting:** Ganti `SSH_PASS` dengan password yang kuat sebelum deploy!
 
